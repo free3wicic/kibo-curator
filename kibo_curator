@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기보 정책자금 큐레이션</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F7F5; color: #1A1A18; min-height: 100vh; }
+
+  .header { background: #185FA5; color: white; padding: 1.5rem 1.25rem 1.25rem; }
+  .header h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .header p { font-size: 13px; opacity: 0.8; }
+
+  .progress-wrap { background: rgba(255,255,255,0.2); height: 4px; margin-top: 1rem; border-radius: 2px; }
+  .progress-bar { height: 4px; background: white; border-radius: 2px; transition: width 0.4s; width: 0%; }
+
+  .content { padding: 1.5rem 1.25rem; max-width: 600px; margin: 0 auto; }
+
+  .step { display: none; }
+  .step.active { display: block; }
+
+  .step-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #A0A09C; margin-bottom: 0.75rem; }
+  .step-title { font-size: 18px; font-weight: 600; color: #1A1A18; margin-bottom: 0.4rem; }
+  .step-sub { font-size: 13px; color: #6B6B67; margin-bottom: 1.25rem; }
+
+  .options { display: grid; gap: 10px; margin-bottom: 1.5rem; }
+  .options.col2 { grid-template-columns: 1fr 1fr; }
+  .options.col3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  .opt { border: 1px solid #E2E0D8; border-radius: 12px; padding: 14px 12px; cursor: pointer; background: white; transition: all 0.15s; text-align: left; }
+  .opt:active { transform: scale(0.97); }
+  .opt.selected { border: 2px solid #185FA5; background: #EEF5FC; }
+  .opt-icon { font-size: 22px; margin-bottom: 6px; }
+  .opt-name { font-size: 13px; font-weight: 600; color: #1A1A18; }
+  .opt-desc { font-size: 11px; color: #A0A09C; margin-top: 2px; }
+
+  .nav { display: flex; gap: 10px; }
+  .btn { flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn:active { transform: scale(0.97); }
+  .btn-prev { background: #E2E0D8; color: #6B6B67; }
+  .btn-next { background: #185FA5; color: white; }
+  .btn-next:hover { background: #0C447C; }
+
+  /* 결과 */
+  .result-card { background: white; border: 1px solid #E2E0D8; border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+  .result-card.top { border: 2px solid #185FA5; }
+  .card-header { padding: 1.25rem 1.25rem 0; }
+  .card-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .card-name { font-size: 16px; font-weight: 600; color: #1A1A18; }
+  .card-sub { font-size: 12px; color: #A0A09C; margin-top: 2px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .badge-blue { background: #EEF5FC; color: #185FA5; }
+  .badge-green { background: #EAF3DE; color: #3B6D11; }
+  .badge-amber { background: #FAEEDA; color: #854F0B; }
+
+  .score-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .score-bg { flex: 1; height: 5px; background: #F0EEE8; border-radius: 3px; }
+  .score-fill { height: 5px; background: #185FA5; border-radius: 3px; }
+  .score-pct { font-size: 12px; font-weight: 600; color: #185FA5; }
+
+  .card-amount { font-size: 22px; font-weight: 700; color: #185FA5; margin-bottom: 4px; }
+  .card-desc { font-size: 13px; color: #6B6B67; line-height: 1.6; margin-bottom: 10px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tag { font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid #E2E0D8; color: #6B6B67; }
+  .card-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 1.25rem 1rem; }
+  .meta-box { background: #F7F7F5; border-radius: 10px; padding: 8px 10px; }
+  .meta-label { font-size: 11px; color: #A0A09C; margin-bottom: 2px; }
+  .meta-val { font-size: 13px; font-weight: 600; color: #1A1A18; }
+
+  .toggle-btn { width: 100%; padding: 12px; background: #F7F7F5; border: none; border-top: 1px solid #E2E0D8; color: #185FA5; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .toggle-icon { transition: transform 0.2s; display: inline-block; font-style: normal; }
+  .toggle-icon.open { transform: rotate(180deg); }
+
+  .detail { display: none; padding: 1rem 1.25rem; border-top: 1px solid #E2E0D8; background: #FAFAF8; }
+  .detail.open { display: block; }
+  .detail-section { margin-bottom: 1rem; }
+  .detail-section:last-child { margin-bottom: 0; }
+  .detail-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .detail-title.green { color: #3B6D11; }
+  .detail-title.amber { color: #854F0B; }
+  .detail-title.red { color: #A32D2D; }
+  .detail-title.blue { color: #185FA5; }
+  .detail-list { list-style: none; }
+  .detail-list li { font-size: 13px; color: #1A1A18; padding: 5px 0 5px 16px; position: relative; border-bottom: 1px solid #E2E0D8; line-height: 1.5; }
+  .detail-list li:last-child { border-bottom: none; }
+  .detail-list li::before { position: absolute; left: 2px; font-weight: 700; }
+  .dot-green li::before { content: '·'; color: #3B6D11; }
+  .dot-amber li::before { content: '·'; color: #854F0B; }
+  .dot-red li::before { content: '✕'; color: #A32D2D; font-size: 10px; top: 7px; }
+  .proc-step { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid #E2E0D8; }
+  .proc-step:last-child { border-bottom: none; }
+  .proc-num { width: 22px; height: 22px; border-radius: 50%; background: #185FA5; color: white; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .proc-text { font-size: 13px; color: #1A1A18; line-height: 1.5; padding-top: 2px; }
+
+  .ai-box { background: white; border: 1px solid #E2E0D8; border-radius: 16px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .ai-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #A0A09C; margin-bottom: 8px; }
+  .ai-text { font-size: 14px; color: #1A1A18; line-height: 1.7; }
+
+  .hint { font-size: 12px; color: #A0A09C; margin-bottom: 1rem; text-align: center; }
+
+  .restart-btn { width: 100%; padding: 14px; background: white; border: 1px solid #E2E0D8; border-radius: 12px; font-size: 15px; font-weight: 600; color: #185FA5; cursor: pointer; margin-top: 1rem; }
+
+  .footer { text-align: center; padding: 1.5rem; color: #A0A09C; font-size: 12px; }
+  .footer a { color: #185FA5; text-decoration: none; }
+
+  .loading { text-align: center; padding: 3rem 0; }
+  .spinner { width: 36px; height: 36px; border: 3px solid #E2E0D8; border-top-color: #185FA5; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: #6B6B67; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>기보 정책자금 큐레이션</h1>
+  <p>기술보증기금 맞춤 보증 프로그램 추천</p>
+  <div class="progress-wrap">
+    <div class="progress-bar" id="prog"></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- Step 1 -->
+  <div class="step active" id="s1">
+    <p class="step-label">Step 1 / 5 — 기업 단계</p>
+    <p class="step-title">현재 기업의 단계는?</p>
+    <p class="step-sub">가장 가까운 것을 선택하세요</p>
+    <div class="options col2">
+      <button class="opt" data-step="1" data-val="예비창업" onclick="sel(this)">
+        <div class="opt-icon">💡</div>
+        <div class="opt-name">예비창업</div>
+        <div class="opt-desc">사업자 미등록</div>
+      </button>
+      <button class="opt" data-step="1" data-val="초기창업" onclick="sel(this)">
+        <div class="opt-icon">🌱</div>
+        <div class="opt-name">초기창업</div>
+        <div class="opt-desc">창업 3년 미만</div>
+      </button>
+      <button class="opt" data-step="1" data-val="성장기" onclick="sel(this)">
+        <div class="opt-icon">📈</div>
+        <div class="opt-name">성장기</div>
+        <div class="opt-desc">창업 3~7년</div>
+      </button>
+      <button class="opt" data-step="1" data-val="중견" onclick="sel(this)">
+        <div class="opt-icon">🏢</div>
+        <div class="opt-name">안정/확장기</div>
+        <div class="opt-desc">창업 7년 이상</div>
+      </button>
+    </div>
+    <div class="nav">
+      <button class="btn btn-next" onclick="next(1)">다음 →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step" id="s2">
+    <p class="step-label">Step 2 / 5 — 사업 분야</p>
+    <p class="step-title">주요 사업 분야는?</p>
+    <p class="step-sub">해당하는 분야를 모두 선택하세요</p>
+    <div class="options col2">
+      <button class="opt" data-step="2" data-val="AI/SW" onclick="multi(this)">
+        <div class="opt-icon">🤖</div>
+        <div class="opt-name">AI / 소프트웨어</div>
+        <div class="opt-desc">클라우드, 데이터</div>
+      </button>
+      <button class="opt" data-step="2" data-val="바이오" onclick="multi(this)">
+        <div class="opt-icon">🧬</div>
+        <div class="opt-name">바이오/헬스케어</div>
+        <div class="opt-desc">의료기기, 신약</div>
+      </button>
+      <button class="opt" data-step="2" data-val="제조" onclick="multi(this)">
+        <div class="opt-icon">⚙️</div>
+        <div class="opt-name">제조/하드웨어</div>
+        <div class="opt-desc">스마트팩토리</div>
+      </button>
+      <button class="opt" data-step="2" data-val="그린" onclick="multi(this)">
+        <div class="opt-icon">🌿</div>
+        <div class="opt-name">그린/에너지</div>
+        <div class="opt-desc">친환경, ESG</div>
+      </button>
+      <button class="opt" data-step="2" data-val="IP" onclick="multi(this)">
+        <div class="opt-icon">📜</div>
+        <div class="opt-name">지식재산 (IP)</div>
+        <div class="opt-desc">특허, 상표</div>
+      </button>
+      <button class="opt" data-step="2" data-val="기타" onclick="multi(this)">
+        <div class="opt-icon">🏪</div>
+        <div class="opt-name">기타</div>
+        <div class="opt-desc">서비스, 유통 등</div>
+      </button>
+    </div>
+    <div class="nav">
+      <button class="btn btn-prev" onclick="prev(2)">← 이전</button>
+      <button class="btn btn-next" onclick="next(2)">다음 →</button>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step" id="s3">
+    <p class="step-label">Step 3 / 5 — 기술/인증</p>
+    <p class="step-title">보유 중인 기술/인증은?</p>
+    <p class="step-sub">해당하는 것을 모두 선택하세요</p>
+    <div class="options col2">
+      <button class="opt" data-step="3" data-val="특허" onclick="multi(this)">
+        <div class="opt-icon">🏅</div>
+        <div class="opt-name">특허 보유</div>
+        <div class="opt-desc">출원/등록 포함</div>
+      </button>
+      <button class="opt" data-step="3" data-val="벤처" onclick="multi(this)">
+        <div class="opt-icon">🚀</div>
+        <div class="opt-name">벤처기업 인증</div>
+        <div class="opt-desc">예비벤처 포함</div>
+      </button>
+      <button class="opt" data-step="3" data-val="연구소" onclick="multi(this)">
+        <div class="opt-icon">🔬</div>
+        <div class="opt-name">기업부설연구소</div>
+        <div class="opt-desc">R&D 조직 보유</div>
+      </button>
+      <button class="opt" data-step="3" data-val="R&D과제" onclick="multi(this)">
+        <div class="opt-icon">📋</div>
+        <div class="opt-name">정부 R&D 과제</div>
+        <div class="opt-desc">국책과제 수행</div>
+      </button>
+      <button class="opt" data-step="3" data-val="엔젤투자" onclick="multi(this)">
+        <div class="opt-icon">👼</div>
+        <div class="opt-name">엔젤투자 유치</div>
+        <div class="opt-desc">3천만원 이상</div>
+      </button>
+      <button class="opt" data-step="3" data-val="없음" onclick="multi(this)">
+        <div class="opt-icon">⬜</div>
+        <div class="opt-name">해당 없음</div>
+        <div class="opt-desc">현재 미보유</div>
+      </button>
+    </div>
+    <div class="nav">
+      <button class="btn btn-prev" onclick="prev(3)">← 이전</button>
+      <button class="btn btn-next" onclick="next(3)">다음 →</button>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="step" id="s4">
+    <p class="step-label">Step 4 / 5 — 자금 목적</p>
+    <p class="step-title">어떤 자금이 필요하신가요?</p>
+    <p class="step-sub">주된 목적을 선택하세요</p>
+    <div class="options col2">
+      <button class="opt" data-step="4" data-val="R&D개발" onclick="sel(this)">
+        <div class="opt-icon">🧪</div>
+        <div class="opt-name">R&D 개발</div>
+        <div class="opt-desc">기술 개발 자금</div>
+      </button>
+      <button class="opt" data-step="4" data-val="운전자금" onclick="sel(this)">
+        <div class="opt-icon">💰</div>
+        <div class="opt-name">운전자금</div>
+        <div class="opt-desc">인건비, 임차료</div>
+      </button>
+      <button class="opt" data-step="4" data-val="시설자금" onclick="sel(this)">
+        <div class="opt-icon">🏭</div>
+        <div class="opt-name">시설/장비</div>
+        <div class="opt-desc">공장, 설비 구축</div>
+      </button>
+      <button class="opt" data-step="4" data-val="사업화" onclick="sel(this)">
+        <div class="opt-icon">🎯</div>
+        <div class="opt-name">사업화/마케팅</div>
+        <div class="opt-desc">제품 출시 및 판매</div>
+      </button>
+      <button class="opt" data-step="4" data-val="디지털전환" onclick="sel(this)">
+        <div class="opt-icon">💻</div>
+        <div class="opt-name">디지털 전환</div>
+        <div class="opt-desc">AI/클라우드 도입</div>
+      </button>
+      <button class="opt" data-step="4" data-val="재기" onclick="sel(this)">
+        <div class="opt-icon">🔄</div>
+        <div class="opt-name">재창업/재기</div>
+        <div class="opt-desc">사업 실패 후 재도전</div>
+      </button>
+    </div>
+    <div class="nav">
+      <button class="btn btn-prev" onclick="prev(4)">← 이전</button>
+      <button class="btn btn-next" onclick="next(4)">다음 →</button>
+    </div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="step" id="s5">
+    <p class="step-label">Step 5 / 5 — 매출 규모</p>
+    <p class="step-title">연간 매출 규모는?</p>
+    <p class="step-sub">대략적인 규모를 선택하세요</p>
+    <div class="options col2">
+      <button class="opt" data-step="5" data-val="매출없음" onclick="sel(this)">
+        <div class="opt-icon">🌰</div>
+        <div class="opt-name">매출 없음</div>
+        <div class="opt-desc">개발/준비 단계</div>
+      </button>
+      <button class="opt" data-step="5" data-val="5억미만" onclick="sel(this)">
+        <div class="opt-icon">🌿</div>
+        <div class="opt-name">5억 미만</div>
+        <div class="opt-desc"></div>
+      </button>
+      <button class="opt" data-step="5" data-val="5~20억" onclick="sel(this)">
+        <div class="opt-icon">🌳</div>
+        <div class="opt-name">5 ~ 20억</div>
+        <div class="opt-desc"></div>
+      </button>
+      <button class="opt" data-step="5" data-val="20억이상" onclick="sel(this)">
+        <div class="opt-icon">🌲</div>
+        <div class="opt-name">20억 이상</div>
+        <div class="opt-desc">BIRD 프로그램 가능</div>
+      </button>
+    </div>
+    <div class="nav">
+      <button class="btn btn-prev" onclick="prev(5)">← 이전</button>
+      <button class="btn btn-next" onclick="analyze()">AI 분석 시작 →</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="step" id="s-loading">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p class="loading-text" id="loading-msg">기보 정책자금 분석 중...</p>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="step" id="s-result">
+    <div class="ai-box" id="ai-summary"></div>
+    <p class="hint">각 카드를 눌러 자격조건 상세 정보를 확인하세요</p>
+    <div id="results-container"></div>
+    <button class="restart-btn" onclick="restart()">← 처음으로 돌아가기</button>
+  </div>
+
+</div>
+
+<div class="footer">
+  기보 디지털지점 <a href="https://www.kibo.or.kr/dbranch" target="_blank">kibo.or.kr</a> · 대표전화 1544-1120
+</div>
+
+<script>
+const A = { 1: null, 2: [], 3: [], 4: null, 5: null };
+
+const PROGRAMS = [
+  { name:"BIRD 프로그램", subtitle:"융자·출연 연계형 R&D 전주기 지원", amount:"최대 30억원", fee:"우대 보증료", period:"최대 7년", desc:"R&D 개발~사업화 전주기 금융 지원. 인증·실증 성공 시 후속 사업화 자금도 연계.", tags:["R&D","사업화","BB등급 이상","매출 20억+"], score:["20억이상","R&D개발","성장기","중견","R&D과제"], required:["중소기업기본법상 중소기업 (또는 총자산 5천억 미만)","최근 매출액 20억원 이상","기술사업평가등급 BB 이상","신기술사업 영위 기업"], preferred:["기업부설연구소 또는 R&D 전담부서 보유","정부 R&D 과제 수행 경험","특허 등 지식재산권 보유"], excluded:["기술사업평가등급 BB 미만","보증금지·제한 대상 기업","매출액 20억 미만 기업"], process:["온라인(디지털지점) 또는 영업점 신청","대표자 상담 및 서류 준비","기술평가·보증심사","보증서 발급 및 대출 실행"] },
+  { name:"창업기업 보증", subtitle:"창업 전 기술평가 연계 우대보증", amount:"1 ~ 3억원", fee:"약 0.5% 내외", period:"최대 5년", desc:"담보 없이 기술력만으로 보증 발급 가능. 창업과 동시에 대출 실행도 가능.", tags:["무담보","기술평가","예비창업자","초기창업"], score:["예비창업","초기창업","매출없음","5억미만","운전자금"], required:["창업 예정자(사업자 등록 전) 또는 창업 3년 미만 기업","신기술사업을 영위하거나 영위 예정인 자","중소기업기본법상 중소기업 규모"], preferred:["기술력 관련 수상 이력 또는 특허 보유","대표자가 해당 기술 분야 경력 보유","사업계획서의 시장성·사업성 우수"], excluded:["창업 3년 초과 기업","보증금지업종 (도박, 유흥 등)","대표자 신용불량 또는 보증사고 이력"], process:["디지털지점 회원가입 및 온라인 신청","대표자 상담 (기술사업내용 검토)","기술력사전점검 체크리스트 작성","현장조사 및 기술평가","보증서 발급"] },
+  { name:"IP 보증", subtitle:"지식재산 활용 R&D·사업화 지원", amount:"최대 10억원", fee:"0.7% 고정 / 일반 0.2%p 차감", period:"최대 7년", desc:"특허·상표·저작권 등 지식재산 보유 기업에 R&D·사업화 자금 지원.", tags:["특허","IP","지식재산","사업화"], score:["특허","IP","R&D개발","사업화"], required:["산업재산권(특허·실용신안·디자인·상표권) 또는 저작권 보유","신지식재산권(소프트웨어, 반도체 회로배치 등)도 해당","기술력평가점수 70점 이상 또는 SMART5 B등급 이상"], preferred:["등록 특허 다수 보유","지식재산 관련 수상·인증 이력","R&D 사업화 계획이 명확한 기업"], excluded:["지식재산권 미보유 기업","기술력평가점수 70점 미만","보증금지·제한 대상 기업"], process:["기보 영업점 또는 디지털지점 신청","보유 IP 현황 및 가치 평가","기술·보증 심사","보증서 발급 및 IP 담보대출 연계"] },
+  { name:"디지털 전환 보증", subtitle:"스마트 팩토리·AI·클라우드 도입 지원", amount:"최대 5억원", fee:"우대 보증료율", period:"최대 5년", desc:"AI·클라우드 도입 및 스마트 팩토리 구축 등 디지털화 추진 기업 지원.", tags:["AI","클라우드","스마트팩토리","디지털전환"], score:["디지털전환","AI/SW","제조","시설자금"], required:["AI·클라우드 도입 또는 스마트팩토리 구축 실질 추진 기업","중소기업기본법상 중소기업","신기술사업 영위 기업"], preferred:["제조업 기반의 디지털 전환 추진 기업","정부 스마트제조 지원사업 참여 기업","AI·클라우드 도입 사업계획이 구체적으로 수립된 기업"], excluded:["디지털 전환과 무관한 일반 운전자금 목적","보증금지업종 해당 기업","기보증 사고 이력 보유 기업"], process:["디지털지점 또는 영업점 신청","디지털 전환 계획서 제출","기술평가 및 보증심사","보증서 발급"] },
+  { name:"예비 유니콘 보증", subtitle:"기업가치 1000억+ 성장 지원", amount:"최대 200억원", fee:"85% 부분보증 (특별출연 시 100%)", period:"선정연도 우선 · 잔여분 차년도", desc:"시장검증·성장성·혁신성 요건을 갖춘 예비 유니콘 기업을 발굴·지원하는 대규모 보증.", tags:["고성장","혁신기업","B등급 이상","대규모자금"], score:["성장기","중견","20억이상","R&D과제","벤처"], required:["기술사업평가등급 B등급 이상","기업가치 1,000억원 이상 (또는 지역스타기업 요건 충족)","시장검증·성장성·혁신성 3가지 요건 모두 충족","중소기업 또는 총자산 5천억 미만 기업"], preferred:["글로벌 수출 실적 또는 해외 진출 계획","민간 투자 유치 이력 (VC, PE 등)","매출 고성장 추세 (YoY 30% 이상)"], excluded:["기술사업평가등급 B등급 미만","기업가치 1000억 미만이면서 지역스타기업 요건 미충족","보증금지·제한 대상 기업"], process:["사업공고 확인 후 온라인 신청·접수","1차 평가 (요건검토·서면심사)","2차 평가 (기술평가·보증심사위원회)","최종평가 (최종선정심의위원회)","최종선정 후 보증 지원"] },
+  { name:"엔젤 특례 보증", subtitle:"엔젤투자 유치 창업기업 패스트트랙", amount:"최대 5억원", fee:"우대 보증료", period:"최대 5년", desc:"기보 엔젤파트너스로부터 투자를 유치한 창업 7년 미만 기업에 특례 보증 지원.", tags:["엔젤투자","특례","창업 7년 미만","패스트트랙"], score:["엔젤투자","초기창업","성장기"], required:["최근 3년 이내 기보 엔젤파트너스로부터 3천만원 이상 투자 유치","기술사업평가등급 B등급 이상","창업 7년 미만 기업","중소기업기본법상 중소기업"], preferred:["기보 엔젤파트너스가 직접 추천한 기업","투자 유치 이후 매출·고객 성장 지표 보유","후속 투자 라운드 진행 중인 기업"], excluded:["기보 엔젤파트너스 외 일반 엔젤로부터만 투자 유치한 기업","창업 7년 이상 기업","기술사업평가등급 B등급 미만"], process:["기보 엔젤파트너스 추천 또는 직접 신청","기술평가·보증심사 (패스트트랙 적용)","보증서 발급 (일반 대비 신속 처리)"] },
+  { name:"그린/ESG 보증", subtitle:"친환경·사회적가치 창출 기업 지원", amount:"최대 10억원", fee:"우대 보증료율", period:"최대 7년", desc:"환경 보전, 사회적 가치 창출을 추구하는 기술혁신 기업 및 소셜벤처기업 보증 지원.", tags:["ESG","친환경","소셜벤처","그린"], score:["그린"], required:["소셜벤처 사회성 평가점수 70점 이상","혁신성장성 평가점수 70점 이상","사회적 약자 보호·환경 보전 등 사회적 가치 창출 기업","공인(예비) 사회적기업 해당 기업"], preferred:["ESG 경영 공시 또는 인증 보유","친환경 기술 관련 특허·인증 보유","정부 사회적경제 지원사업 참여 이력"], excluded:["사회성 또는 혁신성장성 평가점수 70점 미만","단순 친환경 마케팅만 진행하는 기업","보증금지·제한 대상 기업"], process:["소셜벤처 판별 신청 (사회성·혁신성 평가)","기보 영업점 보증 신청","기술평가·보증심사","보증서 발급"] },
+  { name:"재창업 재기지원 보증", subtitle:"실패기업인의 재도전 지원", amount:"최대 3억원", fee:"일반 보증료", period:"최대 5년", desc:"사업 실패로 채무를 부담한 실패기업인이 재창업할 수 있도록 채무조정과 신규보증을 함께 지원.", tags:["재창업","재기지원","채무조정","신복위 협업"], score:["재기","예비창업"], required:["휴업·폐업·채무과다 등으로 사업 중단한 개인사업자 또는 법인 대표 출신","보증채무와 주채무 합산 30억원 이하 (원금 기준)","재창업하여 운영하는 신설기업 (예비창업자 포함)","신기술사업을 영위하는 중소기업"], preferred:["신복위(신용회복위원회) 채무조정 절차 진행 중인 자","이전 사업 실패 원인 분석 및 개선 사업계획 수립","재창업 분야의 기술력 또는 경력 보유"], excluded:["보증채무와 주채무 합산 30억원 초과","고의적 부정행위로 인한 사업 실패","기술사업평가등급 기준 미충족"], process:["신복위에 채무조정 신청","기보·유관기관 협의 (신복위 주관)","신설 기업으로 재창업 등록","보증 신청 및 기술평가","채무조정 + 신규보증 동시 진행"] }
+];
+
+function calcScore(p) {
+  const flat = [A[1], ...(A[2]||[]), ...(A[3]||[]), A[4], A[5]].filter(Boolean);
+  return Math.min(p.score.filter(f => flat.includes(f)).length * 20, 95);
+}
+
+function sel(el) {
+  const s = el.dataset.step;
+  document.querySelectorAll('[data-step="'+s+'"]').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  A[s] = el.dataset.val;
+}
+function multi(el) {
+  el.classList.toggle('selected');
+  A[el.dataset.step] = Array.from(document.querySelectorAll('[data-step="'+el.dataset.step+'"].selected')).map(o => o.dataset.val);
+}
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('s'+n) || document.getElementById('s-'+n);
+  if (el) el.classList.add('active');
+  const pct = isNaN(n) ? 100 : (n-1)/5*100;
+  document.getElementById('prog').style.width = pct+'%';
+  window.scrollTo(0,0);
+}
+function next(cur) {
+  if ([1,4,5].includes(cur) && !A[cur]) { alert('항목을 선택해주세요'); return; }
+  showStep(cur+1);
+}
+function prev(cur) { showStep(cur-1); }
+function restart() {
+  [1,2,3,4,5].forEach(k => { A[k] = [2,3].includes(k) ? [] : null; });
+  document.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+  showStep(1);
+}
+function toggleDetail(id) {
+  const d = document.getElementById('detail-'+id);
+  const btn = document.getElementById('tbtn-'+id);
+  const icon = document.getElementById('ticon-'+id);
+  const isOpen = d.classList.contains('open');
+  d.classList.toggle('open');
+  icon.classList.toggle('open');
+  btn.querySelector('span').textContent = isOpen ? '자격조건 상세 보기 ▼' : '접기 ▲';
+}
+function analyze() {
+  if (!A[5]) { alert('매출 규모를 선택해주세요'); return; }
+  showStep('loading');
+  const msgs = ['기보 보증 상품 매칭 중...','적합도 분석 중...','추천 결과 생성 중...'];
+  let i = 0;
+  const iv = setInterval(() => { if(i<msgs.length) document.getElementById('loading-msg').textContent = msgs[i++]; }, 700);
+  setTimeout(() => {
+    clearInterval(iv);
+    const scored = PROGRAMS.map(p => ({...p, ms: calcScore(p)})).sort((a,b) => b.ms-a.ms);
+    const results = scored.filter(p => p.ms > 0).length > 0 ? scored.filter(p => p.ms > 0) : scored.slice(0,3).map(p => ({...p, ms:30}));
+    const flat = [A[1], ...(A[2]||[]), ...(A[3]||[]), A[4], A[5]].filter(Boolean);
+    let txt = `<strong>${A[1]}</strong> 단계 기업으로, <strong>${A[4]}</strong> 목적의 자금을 탐색하고 있으시네요. 총 <strong>${results.length}개</strong>의 프로그램을 추천드립니다. 특히 <strong>${results[0].name}</strong>이 가장 적합합니다.`;
+    document.getElementById('ai-summary').innerHTML = '<p class="ai-label">AI 분석 요약</p><p class="ai-text">'+txt+'</p>';
+    document.getElementById('results-container').innerHTML = results.map((p,i) => buildCard(p,i)).join('');
+    showStep('result');
+  }, 2200);
+}
+function buildCard(p, idx) {
+  const badgeCls = idx===0?'badge-blue':idx===1?'badge-green':'badge-amber';
+  const badgeTxt = idx===0?'★ 최우선 추천':idx===1?'◆ 적합':'◇ 검토 가능';
+  const id = 'c'+idx;
+  return `
+<div class="result-card${idx===0?' top':''}">
+  <div class="card-header">
+    <div class="card-top-row">
+      <div><div class="card-name">${p.name}</div><div class="card-sub">${p.subtitle}</div></div>
+      <span class="badge ${badgeCls}">${badgeTxt}</span>
+    </div>
+    <div class="score-row">
+      <div class="score-bg"><div class="score-fill" style="width:${p.ms}%"></div></div>
+      <span class="score-pct">적합도 ${p.ms}%</span>
+    </div>
+    <div class="card-amount">${p.amount}</div>
+    <div class="card-desc">${p.desc}</div>
+    <div class="tags">${p.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-box"><div class="meta-label">보증료</div><div class="meta-val">${p.fee}</div></div>
+    <div class="meta-box"><div class="meta-label">보증 기간</div><div class="meta-val">${p.period}</div></div>
+  </div>
+  <button class="toggle-btn" id="tbtn-${id}" onclick="toggleDetail('${id}')">
+    <span>자격조건 상세 보기 ▼</span>
+  </button>
+  <div class="detail" id="detail-${id}">
+    <div class="detail-section">
+      <p class="detail-title green">■ 필수 자격요건</p>
+      <ul class="detail-list dot-green">${p.required.map(r=>`<li>${r}</li>`).join('')}</ul>
+    </div>
+    <div class="detail-section">
+      <p class="detail-title amber">■ 우대 조건</p>
+      <ul class="detail-list dot-amber">${p.preferred.map(r=>`<li>${r}</li>`).join('')}</ul>
+    </div>
+    <div class="detail-section">
+      <p class="detail-title red">■ 지원 제외 대상</p>
+      <ul class="detail-list dot-red">${p.excluded.map(r=>`<li>${r}</li>`).join('')}</ul>
+    </div>
+    <div class="detail-section">
+      <p class="detail-title blue">■ 신청 절차</p>
+      ${p.process.map((s,i)=>`<div class="proc-step"><div class="proc-num">${i+1}</div><div class="proc-text">${s}</div></div>`).join('')}
+    </div>
+  </div>
+</div>`;
+}
+</script>
+</body>
+</html>
